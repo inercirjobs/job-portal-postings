@@ -674,8 +674,23 @@ Recruitment Team
         [user.email],
         fail_silently=False,
     )
-   
 
+
+# streaming method
+
+import json
+@api_view(['GET'])
+@permission_classes([AllowAnyPermission])
+def available_jobs_stream_view(request):
+    def job_stream():
+        for job in Job.objects.filter(status='active').order_by('-created_at'):
+            serializer = JobSerializer(job)
+            yield json.dumps(serializer.data) + '\n'  # NDJSON format
+
+    return StreamingHttpResponse(job_stream(), content_type='application/x-ndjson')
+
+
+# direct method
 
 @api_view(['GET'])
 @permission_classes([AllowAnyPermission])  # or use IsAuthenticated if you want only logged-in users
@@ -683,6 +698,39 @@ def available_jobs_view(request):
     jobs = Job.objects.filter(status='active').order_by('-created_at')
     serializer = JobSerializer(jobs, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# pagination method
+from rest_framework.pagination import PageNumberPagination
+class JobPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+@api_view(['GET'])
+@permission_classes([AllowAnyPermission])
+def available_jobs_pagination_view(request):
+    search = request.GET.get('search', '')
+    location = request.GET.get('location', '')
+    job_type = request.GET.get('job_type', '')
+
+    queryset = Job.objects.filter(status='active').order_by('-created_at')
+
+    if search:
+        queryset = queryset.filter(
+            Q(title__icontains=search) |
+            Q(skills__icontains=search)
+        )
+    if location:
+        queryset = queryset.filter(location__icontains=location)
+    if job_type and job_type != 'all':
+        queryset = queryset.filter(job_type=job_type)
+
+    paginator = JobPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    serializer = JobSerializer(page, many=True)
+
+    return paginator.get_paginated_response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

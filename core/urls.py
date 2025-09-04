@@ -26,8 +26,13 @@ urlpatterns = [
     
     path('contact', views.contact_view, name='contact'),
     
-    
     path('jobs/available/', views.available_jobs_view, name='available-jobs'),
+    
+    path('jobs/available/stream/', views.available_jobs_stream_view, name='available-jobs-stream'),
+    
+    path('jobs/available/pagination/', views.available_jobs_pagination_view, name='available-jobs-pagination'),
+    
+    
     
     path('jobs/<str:job_id>/apply/', views.apply_to_job, name='apply-job'),
     

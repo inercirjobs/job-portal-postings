@@ -158,14 +158,17 @@ class AdminUserSerializer(serializers.ModelSerializer):
         
 class JobSerializer(serializers.ModelSerializer):
     created_by_id = serializers.CharField(source='created_by.id', read_only=True)
-    company_name = serializers.CharField(source='created_by.company_name', read_only=True)
-    created_by = serializers.CharField(source='created_by.id', read_only=True)
+    company = serializers.SerializerMethodField()  # Combine company_name/username fallback logic
 
     class Meta:
         model = Job
-        fields = '__all__'
+        fields = '__all__'  # Includes all model fields
         read_only_fields = ['created_by', 'created_at']
 
+    def get_company(self, obj):
+        user = obj.created_by
+        return getattr(user, 'company_name', None) or getattr(user, 'username', 'Unknown Company')
+    
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = User
