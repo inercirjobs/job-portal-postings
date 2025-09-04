@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: job_portal
+    env: python
+    buildCommand: "pip install poetry && poetry install"
+    startCommand: "poetry run gunicorn job_portal.wsgi:application --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: incircle_jobs_dev_db   # your Render PostgreSQL name
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: job-portal-redis       # your Redis service on Render
+          type: redis
