@@ -54,6 +54,7 @@ class User(AbstractUser):
     skills = models.TextField(blank=True, null=True, help_text="Comma separated skills")
     experience = models.CharField(max_length=50, blank=True, null=True)
     # resume = models.FileField(upload_to='resumes/', blank=True, null=True)
+    company_type = models.CharField(max_length=255, blank=True, null=True)
 
     # resume = models.URLField(blank=True, null=True ,default="https://claude.ai/chat/2862ceeb-0272-42b6-8740-fb3855822d7d")
     location = models.TextField(blank=True, null=True,default="default location")
@@ -152,11 +153,13 @@ class Job(models.Model):
     ]
 
     EXPERIENCE_LEVELS = [
-        ('junior', 'Junior'),
-        ('mid', 'Mid-Level'),
-        ('senior', 'Senior'),
-        ('lead', 'Lead'),
+        ('entry', 'Entry Level'),
+        ('mid', 'Mid Level'),
+        ('senior', 'Senior Level'),
+        ('manager', 'Manager'),
+        ('director', 'Director'),
     ]
+
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('closed', 'Closed'),
@@ -188,6 +191,7 @@ class Job(models.Model):
     min_salary = models.DecimalField(max_digits=10, decimal_places=2)
     max_salary = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=10, choices=CURRENCY_CHOICES)
+    education = models.CharField(max_length=255,blank=True,null=True)
 
     description = models.TextField()
     responsibilities = models.TextField(help_text="List one responsibility per line")
@@ -211,7 +215,7 @@ class Job(models.Model):
         return f"{self.title} ({self.created_by.company_name})"
     class Meta:
         db_table = 'Jobs'
-    
+      
 def generate_application_id():
     return f"app_{secrets.token_hex(6)}"  # Example: app_a1b2c3d4e5f6
 

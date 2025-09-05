@@ -702,6 +702,10 @@ def available_jobs_view(request):
 
 # pagination method
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from django.db.models import Q
+
 class JobPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -713,24 +717,47 @@ def available_jobs_pagination_view(request):
     search = request.GET.get('search', '')
     location = request.GET.get('location', '')
     job_type = request.GET.get('job_type', '')
+    department = request.GET.get('department', '')
+    experience_level = request.GET.get('experience_level', '')
+    education = request.GET.get('education', '')
+    min_salary = request.GET.get('min_salary', None)
+    max_salary = request.GET.get('max_salary', None)
+    company_type = request.GET.get('company_type', '')  # <-- New
 
     queryset = Job.objects.filter(status='active').order_by('-created_at')
 
     if search:
         queryset = queryset.filter(
-            Q(title__icontains=search) |
+            Q(title__icontains=search) | 
             Q(skills__icontains=search)
         )
     if location:
         queryset = queryset.filter(location__icontains=location)
     if job_type and job_type != 'all':
         queryset = queryset.filter(job_type=job_type)
+    if department:
+        departments = [d.strip() for d in department.split(',')]
+        queryset = queryset.filter(department__in=departments)
+    if experience_level:
+        levels = [lvl.strip() for lvl in experience_level.split(',')]
+        queryset = queryset.filter(experience_level__in=levels)
+    if education:
+        educations = [ed.strip() for ed in education.split(',')]
+        queryset = queryset.filter(education__in=educations)
+    if min_salary:
+        queryset = queryset.filter(min_salary__gte=min_salary)
+    if max_salary:
+        queryset = queryset.filter(max_salary__lte=max_salary)
+    if company_type:
+        company_types = [ct.strip() for ct in company_type.split(',')]
+        queryset = queryset.filter(created_by__company_type__in=company_types)  # <-- Filtering here
 
     paginator = JobPagination()
     page = paginator.paginate_queryset(queryset, request)
     serializer = JobSerializer(page, many=True)
 
     return paginator.get_paginated_response(serializer.data)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

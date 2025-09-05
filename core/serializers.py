@@ -70,6 +70,7 @@ class UserSerializer(serializers.ModelSerializer):
             'company_description',
             'bio',
             'website',
+            'company_type',
             'is_verified',
             'created_at',
             'updated_at',
@@ -105,6 +106,7 @@ class HrUserSerializer(serializers.ModelSerializer):
             'skills',
             'experience',
             'resume',
+            'company_type',
             # 'company_name',
             # 'company_description',
             'bio',
@@ -158,17 +160,21 @@ class AdminUserSerializer(serializers.ModelSerializer):
         
 class JobSerializer(serializers.ModelSerializer):
     created_by_id = serializers.CharField(source='created_by.id', read_only=True)
-    company = serializers.SerializerMethodField()  # Combine company_name/username fallback logic
+    company = serializers.SerializerMethodField()
+    company_type = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
-        fields = '__all__'  # Includes all model fields
+        fields = '__all__'
         read_only_fields = ['created_by', 'created_at']
 
     def get_company(self, obj):
         user = obj.created_by
         return getattr(user, 'company_name', None) or getattr(user, 'username', 'Unknown Company')
-    
+
+    def get_company_type(self, obj):
+        return getattr(obj.created_by, 'company_type', None)
+
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = User
