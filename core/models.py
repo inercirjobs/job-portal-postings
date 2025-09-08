@@ -188,8 +188,8 @@ class Job(models.Model):
     work_arrangement = models.CharField(max_length=50, choices=WORK_ARRANGEMENTS)
     experience_level = models.CharField(max_length=50)
 
-    min_salary = models.DecimalField(max_digits=10, decimal_places=2)
-    max_salary = models.DecimalField(max_digits=10, decimal_places=2)
+    min_salary = models.CharField(max_length=50,blank=True,null=True)
+    max_salary = models.CharField(max_length=50,blank=True,null=True)
     currency = models.CharField(max_length=10, choices=CURRENCY_CHOICES)
     education = models.CharField(max_length=255,blank=True,null=True)
 
