@@ -84,15 +84,14 @@ WSGI_APPLICATION = 'job_portal.wsgi.application'
 #         'PORT': '3306',
 #     }
 # }
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT', '5432'),
+        'NAME': 'incircle_db',
+        'USER': 'dev_admin',
+        'PASSWORD': 'sq4UfOuULLDXwEenkTypBAlTbg0fZux6',
+        'HOST': 'dpg-d1o5g36uk2gs73aotdjg-a.singapore-postgres.render.com',
+        'PORT': '5432',
     }
 }
 

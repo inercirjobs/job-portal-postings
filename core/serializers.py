@@ -162,6 +162,7 @@ class JobSerializer(serializers.ModelSerializer):
     created_by_id = serializers.CharField(source='created_by.id', read_only=True)
     company = serializers.SerializerMethodField()
     company_type = serializers.SerializerMethodField()
+    
 
     class Meta:
         model = Job
@@ -190,6 +191,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
     job_title = serializers.SerializerMethodField()
     company_name = serializers.SerializerMethodField()
     resume_url = serializers.SerializerMethodField()
+    job_location = serializers.SerializerMethodField()
     applied_by = UserSerializer(read_only=True)
 
     class Meta:
@@ -204,6 +206,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
             'role',
             'applied_by',
             'applied_on',
+            'job_location',
             'status',
             'resume_url',
             'main_resume_url',  # optional if needed elsewhere
@@ -217,6 +220,9 @@ class JobApplicationSerializer(serializers.ModelSerializer):
 
     def get_job_title(self, obj):
         return obj.job.title if obj.job else None
+    
+    def get_job_location(self, obj):
+        return obj.job.location if obj.job else None
 
     def get_company_name(self, obj):
         if obj.job and obj.job.created_by:
