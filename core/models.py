@@ -9,10 +9,9 @@ import secrets
 import string
 
 def generate_custom_user_id():
-    # chars = string.ascii_letters + string.digits + "-_.~!$'()*@"
-    chars = string.ascii_letters + string.digits 
+    chars = string.ascii_letters + string.digits + "-_.~!$'()*@"
     random_id = ''.join(secrets.choice(chars) for _ in range(10))
-    return f"user{random_id}"
+    return f"user_{random_id}"
 
 
 
@@ -55,6 +54,7 @@ class User(AbstractUser):
     skills = models.TextField(blank=True, null=True, help_text="Comma separated skills")
     experience = models.CharField(max_length=50, blank=True, null=True)
     # resume = models.FileField(upload_to='resumes/', blank=True, null=True)
+    company_type = models.CharField(max_length=255, blank=True, null=True)
 
     # resume = models.URLField(blank=True, null=True ,default="https://claude.ai/chat/2862ceeb-0272-42b6-8740-fb3855822d7d")
     location = models.TextField(blank=True, null=True,default="default location")
@@ -65,8 +65,6 @@ class User(AbstractUser):
     company_name = models.CharField(max_length=255, blank=True, null=True)
     company_description = models.TextField(blank=True, null=True)
     bio = models.TextField(blank=True, null=True,default="i am a singer")
-    company_type = models.CharField(max_length=255, blank=True, null=True)
-    
     website = models.URLField(blank=True, null=True)
     is_verified = models.CharField(
         max_length=10,
@@ -217,7 +215,7 @@ class Job(models.Model):
         return f"{self.title} ({self.created_by.company_name})"
     class Meta:
         db_table = 'Jobs'
-    
+      
 def generate_application_id():
     return f"app_{secrets.token_hex(6)}"  # Example: app_a1b2c3d4e5f6
 

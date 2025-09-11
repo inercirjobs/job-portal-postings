@@ -5,57 +5,52 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'users', views.UserViewSet)
-router.register(r'admin', views.AdminViewSet)
-router.register(r'resumes', views.ResumeViewSet, basename='resume')
 
 urlpatterns = [
     
     
-    
-    path('users/dashboard/', views.UserViewSet.as_view({'get': 'dashboard_data'}), name='dashboard-data'),
-    
-    path('hr/dashboard/', views.HRViewSet.as_view({'get': 'hr_dashboard'}), name='hr-dashboard'),
-    
-    
-    
     # Authentication
+    path('auth/google-login/', views.google_login_view, name='google-login'),
     path('auth/register/', views.register_view, name='register'),
     path('auth/login/', views.login_view, name='login'),
     path('auth/logout/', views.logout_view, name='logout'),
     
-    path('auth/google-login/', views.google_login_view, name='google-login'),
 
-    path('company/<str:pk>/', views.company_detail_view, name='company-detail'),
+        
+    path('users/request-otp/', views.RequestOTP.as_view(), name='request-otp'),
+    path('users/verify-otp/', views.VerifyOTP.as_view(), name='verify-otp'),
+    path('users/reset-password/', views.ResetPassword.as_view(), name='reset-password'),
+
+
     
     
     path('contact', views.contact_view, name='contact'),
-
     
-    path('jobs/post/', views.post_job_view, name='post-job'),  # HR only
-    path('jobs/post-csv/', views.post_jobs_from_csv, name='post-jobs-from-csv'),
+    path('jobs/available/', views.available_jobs_view, name='available-jobs'),
+    
+    path('jobs/available/stream/', views.available_jobs_stream_view, name='available-jobs-stream'),
+    
+    path('jobs/available/pagination/', views.available_jobs_pagination_view, name='available-jobs-pagination'),
+    
+    
+    
     path('jobs/<str:job_id>/apply/', views.apply_to_job, name='apply-job'),
-    path('jobs/all/', views.all_jobs_view, name='all-jobs'),  # Admin only
-    path('jobs/created/all', views.all_jobs_created_view, name='all-jobs'),  # hr only
-    path('jobs/created/edit/<str:job_id>/', views.edit_created_job_view, name='edit-job'),# hr only
-    path('jobs/created/delete/<str:job_id>/', views.delete_created_job_view, name='delete-job'),# hr and admin only
     
+    path('applications/applied/', views.my_applications_view, name='my-applications'),
     
-    path('jobs/<str:job_id>/applications/', views.specific_job_applications_view, name='job-applications'),
-
-
+    path('company/<str:pk>/', views.company_detail_view, name='company-detail'),
     
-    # path('jobs/<str:job_id>/analyze-resumes/', views.analyze_resumes_view, name='job-analyze-resumes'),
-
-
-    path('applications/hr/', views.all_hr_applications_view, name='hr-all-applications'), # HR only
-    path('hr/users', views.all_hr_user_view, name='hr-all-users'), # HR only
+    path('users/companies-list/', views.UserViewSet.as_view({'get': 'companies_list'}), name='companies-list'),
+    
     
 
     
+
+
     
-    path('applications/<str:application_id>/update-status/', views.update_application_status, name='update_application_status'),
-
-
+    path('users/dashboard/', views.UserViewSet.as_view({'get': 'dashboard_data'}), name='dashboard-data'),
+    
+    
 
     
     path('users/profile/', views.UserViewSet.as_view({'get': 'profile'}), name='user-profile'),
@@ -63,7 +58,6 @@ urlpatterns = [
     path('users/profile/edit/', views.UserViewSet.as_view({'patch': 'edit_profile'}), name='user-profile-edit'),
 
     # path('users/companies-list/', views.UserViewSet.as_view({'get': 'profile'}), name='user-profile'),
-    path('users/companies-list/', views.UserViewSet.as_view({'get': 'companies_list'}), name='companies-list'),
 
     path('users/upload-resume/', views.UserViewSet.as_view({'post': 'upload_resume'}), name='user-upload-resume'),
     path('users/upload-profile-image/', views.UserViewSet.as_view({'post': 'upload_profile_image'}), name='upload-profile-image'),
@@ -76,56 +70,8 @@ urlpatterns = [
     path('users/confirm-subscription-payment/', views.UserViewSet.as_view({'post': 'confirm_subscription_payment'}), name='confirm-subscription-payment'),
 
 
-    
-    
-    # path('users/', views.UserViewSet.as_view({'get': 'list'}), name='users-list'),  # Admin sees all, others see self
-    path('jobs/available/', views.available_jobs_view, name='available-jobs'),
-    path('applications/applied/', views.my_applications_view, name='my-applications'),
-    path('hr/users/all/', views.AdminViewSet.as_view({'get': 'users_all'}), name='admin-users-all'),
-
-
-    
-    path('admin/pending-verifications/', views.AdminViewSet.as_view({'get': 'pending_verifications'}), name='pending-verifications'),
-    path('admin/verify-company/<str:pk>/', views.AdminViewSet.as_view({'post': 'verify_company'}), name='verify-company'),
-    # 🔝 there we can use admin/verify-company/id and in raw body {"action": "approve"}
-
-    path('admin/users/all/', views.AdminViewSet.as_view({'get': 'users_all'}), name='admin-users-all'),
-    path('admin/admin-list/', views.AdminViewSet.as_view({'get': 'admin_list'}), name='admin-admin-list'),
-    path('admin/companies/all/', views.AdminViewSet.as_view({'get': 'companies_all'}), name='admin-companies-all'),
-    path('admin/jobs/all/', views.AdminViewSet.as_view({'get': 'jobs_all'}), name='admin-jobs-all'),
-    path('admin/applications/', views.AdminViewSet.as_view({'get': 'all_applications'}), name='all-applications'),
-    path('admin/contact-list/', views.AdminViewSet.as_view({'get': 'contact_list'}), name='admin-contact-list'),
-    path('admin/edit-role/<str:pk>/', views.AdminViewSet.as_view({'patch': 'edit_user_role'}), name='edit-user-role'),
-    path('admin/subscriptions/', views.AdminViewSet.as_view({'get': 'all_subscriptions'}), name='all-subscriptions'),
-
-
-    
-    # otp routes
-    
-    path('users/request-otp/', views.RequestOTP.as_view(), name='request-otp'),
-    path('users/verify-otp/', views.VerifyOTP.as_view(), name='verify-otp'),
-    path('users/reset-password/', views.ResetPassword.as_view(), name='reset-password'),
-    
-    
-    
-    # path("api/subscription/create/", views.CreateSubscriptionAPIView.as_view()),
-    
-    # path('stream-users/', views.users_all_stream, name='stream_users'),
-    # path('stream-users/', views.AdminViewSet.as_view({'get': 'users_all_stream'}), name='view-stream'),
-    
-    
-    # path('favicon.ico', views.favicon_view),
-    path('resumes/<int:pk>/download/', views.ResumeViewSet.as_view({'get': 'download_url'}), name='resume-download'),
-# GET /api/resumes/	Normal user: List only their resumes
-# GET /api/resumes/?user=2	Staff: List resumes belonging to user with ID 2
-# POST /api/resumes/	Upload new resume (user automatically set to requester)
-# GET /api/resumes/5/	Retrieve resume with ID 5
-# GET /api/resumes/5/download/	Get presigned download URL for resume ID 5
-
     path("create-subscription/", views.create_subscription, name="create-subscription"),
-    path("create-one-time-payment/", views.create_one_time_payment, name="create-one-time-payment"),
     path("raise-subscription-charge/", views.raise_subscription_charge, name="raise-subscription-charge"),
-    path("webhook/", views.subscription_webhook, name="subscription-webhook"),
     path("cashfree/webhook/", views.cashfree_webhook, name="subscription-webhook"),
 
 

@@ -589,163 +589,6 @@ class UserViewSet(viewsets.ModelViewSet):
             "subscription": UserSubscriptionSerializer(sub_obj).data
         }, status=status.HTTP_200_OK)
 
-class AdminViewSet(viewsets.ModelViewSet):
-    queryset = AdminUser.objects.all()
-    serializer_class = AdminUserSerializer
-    permission_classes = [IsAdmin]
-
-    @action(detail=False, methods=['get'])
-    def pending_verifications(self, request):
-        pending_users = User.objects.filter(role='hr', is_verified='pending')
-        serializer = UserSerializer(pending_users, many=True)
-        return Response(serializer.data)
-
-
-    
-    @action(detail=True, methods=['post'])
-    def verify_company(self, request, pk=None):
-        """
-        Approve or Reject HR Company Account
-        POST body: { "action": "approve" } or { "action": "reject" }
-        """
-        action_type = request.data.get('action')  # 'approve' or 'reject'
-
-        try:
-            user = User.objects.get(pk=pk, role='hr')
-        except User.DoesNotExist:
-            return Response({'error': 'Company user not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        if action_type == 'approve':
-            user.is_verified = 'approved'
-        elif action_type == 'reject':
-            user.is_verified = 'rejected'
-        else:
-            return Response({'error': 'Invalid action. Must be approve or reject.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.save()
-        return Response({'message': f'Company {action_type}d successfully'})
-
-    @action(detail=False, methods=['get'])
-    def users_all(self, request):
-        users = User.objects.filter(role='user')
-        serializer = UserSerializer(users, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'], url_path='get-resume-url')
-    def get_resume_url(self, request):
-        """
-        Admin-only: Fetch pre-signed S3 URL for a user's resume using user ID or username.
-        Example: /admin/get-resume-url/?user_id=123 or ?username=user@example.com
-        """
-
-        user_id = request.query_params.get('user_id')
-        username = request.query_params.get('username')
-
-        if not user_id and not username:
-            return Response({"detail": "Provide either 'user_id' or 'username'."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            if user_id:
-                user = User.objects.get(id=user_id)
-            else:
-                user = User.objects.get(username=username)
-        except User.DoesNotExist:
-            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        if not user.resume_key:
-            return Response({"detail": "This user has no resume uploaded."}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
-            s3 = boto3.client('s3',
-                            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                            region_name=settings.AWS_S3_REGION_NAME)
-
-            presigned_url = s3.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': user.resume_key},
-                ExpiresIn=3600
-            )
-        except ClientError as e:
-            return Response({"detail": "Failed to generate URL", "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({"resume_url": presigned_url}, status=status.HTTP_200_OK)
-    
-    # @action(detail=False, methods=['get'])
-    # def users_all_stream(self, request):
-    #     def user_generator():
-    #         users = User.objects.filter(role='user')
-    #         for user in users.iterator():
-    #             serializer = UserSerializer(user)
-    #             yield json.dumps(serializer.data) + '\n'
-    #             time.sleep(1)
-
-    #     return StreamingHttpResponse(user_generator(), content_type='application/x-ndjson')
-
-    @action(detail=False, methods=['get'])
-    def companies_all(self, request):
-        companies = User.objects.filter(role='hr')
-        serializer = UserSerializer(companies, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def admin_list(self, request):
-        admins = User.objects.filter(role='admin')
-        serializer = UserSerializer(admins, many=True)
-        return Response(serializer.data)
-
-
-    @action(detail=False, methods=['get'])
-    def jobs_all(self, request):
-        jobs = Job.objects.all().order_by('-created_at')
-        serializer = JobSerializer(jobs, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def all_applications(self, request):
-        applications = JobApplication.objects.all().select_related('job', 'applied_by', 'job__created_by')
-        serializer = JobApplicationSerializer(applications, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['patch'], url_path='edit-role', permission_classes=[IsAdmin])
-    def edit_user_role(self, request, pk=None):
-        try:
-            user = User.objects.get(pk=pk)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        new_role = request.data.get('role')
-        valid_roles = ['user', 'admin']
-
-        if new_role not in valid_roles:
-            return Response({'error': f"Invalid role. Choose from {valid_roles}."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        user.role = new_role
-        user.save()
-        return Response({'message': f"User role updated to '{new_role}'"}, status=status.HTTP_200_OK)
-
-    @action(detail=False, methods=['get'], url_path='contact-list')
-    def contact_list(self, request):
-        contacts = Contact.objects.all().order_by('-created_at')  # Optional ordering
-        serializer = ContactSerializer(contacts, many=True)
-        return Response(serializer.data)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def post_job_view(request):
-    user = request.user
-
-    # Only HR users can post
-    if user.role != 'hr':
-        return Response({'detail': 'Only HR users can post jobs.'}, status=status.HTTP_403_FORBIDDEN)
-
-    serializer = JobSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save(created_by=user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -753,48 +596,6 @@ def post_job_view(request):
 def normalize_multiline_field(value):
     return "\n".join(part.strip() for part in re.split(r"\r?\n|;", value or "") if part.strip())
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def post_jobs_from_csv(request):
-    user = request.user
-
-    if user.role != 'hr':
-        return Response({'detail': 'Only HR users can post jobs.'}, status=status.HTTP_403_FORBIDDEN)
-
-    if 'file' not in request.FILES:
-        return Response({'detail': 'CSV file not provided.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    file = request.FILES['file']
-    decoded_file = file.read().decode('latin-1')
-
-    io_string = io.StringIO(decoded_file, newline='')
-    reader = csv.DictReader(io_string, quotechar='"')
-
-    jobs_created = 0 
-    errors = []
-
-    for row_num, row in enumerate(reader, start=1):
-        # Normalize multiline fields
-        row["responsibilities"] = normalize_multiline_field(row.get("responsibilities", ""))
-        row["requirements"] = normalize_multiline_field(row.get("requirements", ""))
-        row["benefits"] = normalize_multiline_field(row.get("benefits", ""))
-
-        # Optionally normalize skills to be comma-separated and trimmed
-        if "skills" in row and row["skills"]:
-            row["skills"] = ",".join(part.strip() for part in row["skills"].split(",") if part.strip())
-
-        serializer = JobSerializer(data=row)
-        if serializer.is_valid():
-            serializer.save(created_by=user)
-            jobs_created += 1
-        else:
-            errors.append({f'row_{row_num}': serializer.errors})
-
-    return Response({
-        'jobs_created': jobs_created,
-        'errors': errors
-    }, status=status.HTTP_201_CREATED if jobs_created else status.HTTP_400_BAD_REQUEST)
-  
     
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
@@ -837,36 +638,6 @@ from .models import JobApplication
 
 
 
-@api_view(['PATCH'])
-@permission_classes([permissions.IsAuthenticated])
-def update_application_status(request, application_id):
-    try:
-        application = JobApplication.objects.select_related('job', 'applied_by', 'job__created_by').get(application_id=application_id)
-    except JobApplication.DoesNotExist:
-        return Response({"error": "Application not found"}, status=404)
-
-    user = request.user
-
-    # Only the HR who posted the job OR an admin can update status
-    if user != application.job.created_by and user.role != 'admin':
-        return Response({"error": "You are not authorized to update this application"}, status=403)
-
-    new_status = request.data.get('status')
-    if new_status not in dict(JobApplication.STATUS_CHOICES):
-        return Response({"error": "Invalid status"}, status=400)
-
-    old_status = application.status
-    application.status = new_status
-    application.save()
-
-    # ✅ Send email only if status has changed
-    if old_status != new_status:
-        send_status_update_email(application, old_status, new_status)
-
-    return Response({
-        "message": "Status updated successfully",
-        "status": application.get_status_display()
-    }, status=200)
 
 def send_status_update_email(application,old_status, new_status):
     user = application.applied_by
@@ -903,82 +674,23 @@ Recruitment Team
         [user.email],
         fail_silently=False,
     )
-   
 
+
+# streaming method
+
+import json
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def all_jobs_view(request):
-    if request.user.role != 'admin':
-        return Response({"error": "Only admins can view all jobs."}, status=403)
+@permission_classes([AllowAnyPermission])
+def available_jobs_stream_view(request):
+    def job_stream():
+        for job in Job.objects.filter(status='active').order_by('-created_at'):
+            serializer = JobSerializer(job)
+            yield json.dumps(serializer.data) + '\n'  # NDJSON format
 
-    jobs = Job.objects.all().order_by('-created_at')
-    serializer = JobSerializer(jobs, many=True)
-    return Response(serializer.data)
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def all_jobs_created_view(request):
-    if request.user.role != 'hr':
-        return Response(
-            {"error": "Access denied. Only HRs can view their posted jobs."},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    jobs = Job.objects.filter(created_by=request.user).order_by('-created_at')
-    serializer = JobSerializer(jobs, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-@api_view(['PUT', 'PATCH'])
-@permission_classes([IsAuthenticated])
-def edit_created_job_view(request, job_id):  # job_id is a string (UUID or slug)
-    if request.user.role != 'hr':
-        return Response(
-            {"error": "Access denied. Only HRs can edit job posts."},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    try:
-        job = Job.objects.get(id=job_id, created_by=request.user)
-    except Job.DoesNotExist:
-        return Response(
-            {"error": "Job not found or you're not authorized to edit this job."},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    serializer = JobSerializer(job, data=request.data, partial=(request.method == 'PATCH'))
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    return StreamingHttpResponse(job_stream(), content_type='application/x-ndjson')
 
 
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def delete_created_job_view(request, job_id):
-    # Only HRs and Admins can delete job posts
-    if request.user.role not in ['hr', 'admin']:
-        return Response(
-            {"error": "Access denied. Only HRs and Admins can delete job posts."},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    try:
-        if request.user.role == 'admin':
-            # Admins can delete any job
-            job = Job.objects.get(id=job_id)
-        else:
-            # HRs can only delete jobs they created
-            job = Job.objects.get(id=job_id, created_by=request.user)
-    except Job.DoesNotExist:
-        return Response(
-            {"error": "Job not found or you're not authorized to delete this job."},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    job.delete()  # Related applications will be deleted due to on_delete=models.CASCADE
-    return Response({"message": "Job and related applications deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
-
-
+# direct method
 
 @api_view(['GET'])
 @permission_classes([AllowAnyPermission])  # or use IsAuthenticated if you want only logged-in users
@@ -986,6 +698,66 @@ def available_jobs_view(request):
     jobs = Job.objects.filter(status='active').order_by('-created_at')
     serializer = JobSerializer(jobs, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# pagination method
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from django.db.models import Q
+
+class JobPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+@api_view(['GET'])
+@permission_classes([AllowAnyPermission])
+def available_jobs_pagination_view(request):
+    search = request.GET.get('search', '')
+    location = request.GET.get('location', '')
+    job_type = request.GET.get('job_type', '')
+    department = request.GET.get('department', '')
+    experience_level = request.GET.get('experience_level', '')
+    education = request.GET.get('education', '')
+    min_salary = request.GET.get('min_salary', None)
+    max_salary = request.GET.get('max_salary', None)
+    company_type = request.GET.get('company_type', '')  # <-- New
+
+    queryset = Job.objects.filter(status='active').order_by('-created_at')
+
+    if search:
+        queryset = queryset.filter(
+            Q(title__icontains=search) | 
+            Q(skills__icontains=search)
+        )
+    if location:
+        queryset = queryset.filter(location__icontains=location)
+    if job_type and job_type != 'all':
+        queryset = queryset.filter(job_type=job_type)
+    if department:
+        departments = [d.strip() for d in department.split(',')]
+        queryset = queryset.filter(department__in=departments)
+    if experience_level:
+        levels = [lvl.strip() for lvl in experience_level.split(',')]
+        queryset = queryset.filter(experience_level__in=levels)
+    if education:
+        educations = [ed.strip() for ed in education.split(',')]
+        queryset = queryset.filter(education__in=educations)
+    if min_salary:
+        queryset = queryset.filter(min_salary__gte=min_salary)
+    if max_salary:
+        queryset = queryset.filter(max_salary__lte=max_salary)
+    if company_type:
+        company_types = [ct.strip() for ct in company_type.split(',')]
+        queryset = queryset.filter(created_by__company_type__in=company_types)  # <-- Filtering here
+
+    paginator = JobPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    serializer = JobSerializer(page, many=True)
+
+    return paginator.get_paginated_response(serializer.data)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -995,115 +767,7 @@ def my_applications_view(request):
     serializer = JobApplicationSerializer(applications, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def all_hr_applications_view(request):
-    user = request.user
 
-    # Only HRs can access this
-    if user.role != 'hr':
-        return Response({"error": "Only HRs can access this."}, status=403)
-
-    # Fetch applications for jobs created by this HR
-    applications = JobApplication.objects.filter(job__created_by=user).order_by('-applied_on')
-    serializer = JobApplicationSerializer(applications, many=True)
-    return Response(serializer.data, status=200)
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def specific_job_applications_view(request, job_id: str) -> Response:
-    user = request.user
-
-    # Ensure only HR users can access
-    if user.role != 'hr':
-        return Response({"error": "Only HRs can access this."}, status=403)
-
-    # Get the job and ensure it belongs to the logged-in HR user
-    job = get_object_or_404(Job, id=job_id, created_by=user)
-
-    # Fetch applications related to this job
-    applications = JobApplication.objects.filter(job=job).order_by('-applied_on')
-    serializer = JobApplicationSerializer(applications, many=True)
-    return Response(serializer.data, status=200)
-
-# import requests
-
-# @api_view(['POST'])
-# @permission_classes([IsAuthenticated])
-# def analyze_resumes_view(request, job_id: str) -> Response:
-#     user = request.user
-
-#     if user.role != 'hr':
-#         return Response({"error": "Only HRs can access this."}, status=403)
-
-#     job = get_object_or_404(Job, id=job_id, created_by=user)
-#     applications = JobApplication.objects.filter(job=job)
-#     job_description = job.description or ""
-
-#     analysis_results = []
-
-#     for app in applications:
-#         if not app.resume_url:
-#             continue
-
-#         presigned_url = generate_presigned_url(app.resume_url)
-#         if not presigned_url:
-#             continue
-
-#         try:
-#             # ✅ Download PDF from S3
-#             response = requests.get(presigned_url)
-#             resume_bytes = response.content
-
-#             # ✅ Extract text from in-memory bytes
-#             resume_text = extract_text_from_pdf_bytes(resume_bytes)
-
-#             # ✅ Check if it's a valid resume
-#             is_resume, resume_note, has_neg = looks_like_resume(resume_text)
-
-#             if not is_resume:
-#                 analysis_results.append({
-#                     'application_id': app.application_id,
-#                     'name': app.name,
-#                     'valid_resume': False,
-#                     'reason': resume_note,
-#                     'score': 0,
-#                     'resume_url': presigned_url,
-#                 })
-#                 continue
-
-#             # ✅ Calculate similarity
-#             similarity = sbert_similarity_percent(job_description, resume_text)
-#             if has_neg:
-#                 similarity = max(0, similarity - 10)
-
-#             analysis_results.append({
-#                 'application_id': app.application_id,
-#                 'name': app.name,
-#                 'valid_resume': True,
-#                 'score': similarity,
-#                 'resume_url': presigned_url,
-#             })
-
-#         except Exception as e:
-#             print(f"Error analyzing resume for {app.name}: {e}")
-#             continue
-
-#     return Response(analysis_results, status=200)
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def all_hr_user_view(request):
-    user = request.user
-
-    # Only HRs can access this
-    if user.role != 'hr':
-        return Response({"error": "Only HRs can access this."}, status=403)
-
-    # Fetch applications for jobs created by this HR
-    users = User.objects.filter(role='user')
-    serializer = HrUserSerializer(users, many=True)
-    return Response(serializer.data, status=200)
 
 
 
@@ -1232,273 +896,7 @@ class ResetPassword(APIView):
         return Response(serializer.errors, status=400)
     
     
-    
-# from rest_framework import viewsets, status, permissions
-# from rest_framework.decorators import action
-# from rest_framework.response import Response
-# from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-# from django.utils import timezone
-# from django.conf import settings
-# from botocore.exceptions import ClientError
-# import boto3
-# import uuid
-
-# from .models import User, Job, JobApplication
-# from .serializers import UserSerializer, JobSerializer, JobApplicationSerializer, HrUserSerializer, ChangePasswordSerializer
-
-
-class HRViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
-
-    def get_permissions(self):
-        if self.action in ['dashboard', 'post_job', 'edit_job', 'delete_job', 'job_applications', 'user_list']:
-            return [permissions.IsAuthenticated()]
-        return super().get_permissions()
-
-    def _is_hr(self, user):
-        return user.role == 'hr'
-
-    @action(detail=False, methods=['get'], url_path='hr-dashboard')
-    def hr_dashboard(self, request):
-        user = request.user
-        if not self._is_hr(user):
-            return Response({"detail": "Only HR users can access dashboard."}, status=403)
-
-        # HR Profile
-        user_profile_data = UserSerializer(user).data
-
-        # All Jobs Posted by HR (renamed to posted_jobs)
-        posted_jobs = Job.objects.filter(created_by=user).order_by('-created_at')
-        posted_jobs_data = JobSerializer(posted_jobs, many=True).data
-
-        # Recent Applications Received for HR's Jobs
-        recent_applications = JobApplication.objects.filter(
-            job__created_by=user
-        ).order_by('-applied_on')[:10]
-        Job_applications_data = JobApplicationSerializer(recent_applications, many=True).data
-
-        response_data = {
-            "user_profile": user_profile_data,
-            "posted_jobs": posted_jobs_data,
-            "Job_applications": Job_applications_data,
-            # "recommended_jobs": []  # Add matching jobs later if needed
-        }
-
-        return Response(response_data, status=200)
-
-    @action(detail=False, methods=['post'], url_path='post-job')
-    def post_job(self, request):
-        user = request.user
-        if not self._is_hr(user):
-            return Response({"detail": "Only HRs can post jobs."}, status=403)
-
-        serializer = JobSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(created_by=user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=400)
-    
-    @action(detail=False, methods=['post'], url_path='post-jobs-csv')
-    def post_jobs_csv(self, request):
-        user = request.user
-        if not self._is_hr(user):
-            return Response({"detail": "Only HRs can post jobs."}, status=403)
-
-        csv_file = request.FILES.get('file')
-        if not csv_file:
-            return Response({"error": "CSV file is required."}, status=400)
-
-        if not csv_file.name.endswith('.csv'):
-            return Response({"error": "Please upload a CSV file."}, status=400)
-
-        # Decode the file. Assuming UTF-8 encoded CSV.
-        data = csv_file.read().decode('cp1252')
-
-        io_string = io.StringIO(data)
-        reader = csv.DictReader(io_string)
-
-        created_jobs = []
-        errors = []
-        for i, row in enumerate(reader, start=1):
-            serializer = JobSerializer(data=row)
-            if serializer.is_valid():
-                serializer.save(created_by=user)
-                created_jobs.append(serializer.data)
-            else:
-                errors.append({"row": i, "errors": serializer.errors})
-
-        if errors:
-            return Response({
-                "created": created_jobs,
-                "errors": errors
-            }, status=207)  # 207 Multi-Status (partial success)
-
-        return Response({"created": created_jobs}, status=status.HTTP_201_CREATED)
-
-    @action(detail=False, methods=['get'], url_path='jobs')
-    def all_jobs(self, request):
-        user = request.user
-        if not self._is_hr(user):
-            return Response({"detail": "Only HRs can view jobs."}, status=403)
-
-        jobs = Job.objects.filter(created_by=user).order_by('-created_at')
-        serializer = JobSerializer(jobs, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['patch'], url_path='edit-job/(?P<job_id>[^/.]+)')
-    def edit_job(self, request, job_id):
-        user = request.user
-        if not self._is_hr(user):
-            return Response({"detail": "Only HRs can edit jobs."}, status=403)
-
-        try:
-            job = Job.objects.get(id=job_id, created_by=user)
-        except Job.DoesNotExist:
-            return Response({"detail": "Job not found or unauthorized."}, status=404)
-
-        serializer = JobSerializer(job, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
-
-    @action(detail=False, methods=['delete'], url_path='delete-job/(?P<job_id>[^/.]+)')
-    def delete_job(self, request, job_id):
-        user = request.user
-        if user.role not in ['hr', 'admin']:
-            return Response({"detail": "Unauthorized."}, status=403)
-
-        try:
-            job = Job.objects.get(id=job_id)
-            if user.role == 'hr' and job.created_by != user:
-                return Response({"detail": "Not allowed to delete this job."}, status=403)
-        except Job.DoesNotExist:
-            return Response({"detail": "Job not found."}, status=404)
-
-        job.delete()
-        return Response({"detail": "Job deleted successfully."}, status=204)
-
-    @action(detail=False, methods=['patch'], url_path='update-application-status/(?P<application_id>[^/.]+)')
-    def update_application_status(self, request, application_id):
-        user = request.user
-
-        try:
-            application = JobApplication.objects.select_related('job').get(application_id=application_id)
-        except JobApplication.DoesNotExist:
-            return Response({"detail": "Application not found."}, status=404)
-
-        if user != application.job.created_by and user.role != 'admin':
-            return Response({"detail": "Not authorized to update this application."}, status=403)
-
-        new_status = request.data.get('status')
-        if new_status not in dict(JobApplication.STATUS_CHOICES):
-            return Response({"detail": "Invalid status."}, status=400)
-
-        application.status = new_status
-        application.save()
-        return Response({"message": "Status updated.", "status": application.get_status_display()})
-
-    @action(detail=False, methods=['get'], url_path='applications')
-    def job_applications(self, request):
-        user = request.user
-        if not self._is_hr(user):
-            return Response({"detail": "Only HRs can view applications."}, status=403)
-
-        applications = JobApplication.objects.filter(job__created_by=user).order_by('-applied_on')
-        serializer = JobApplicationSerializer(applications, many=True)
-        return Response(serializer.data)
-    
-
-    # @action(detail=True, methods=["post"], url_path="analyze-resumes")
-    # def analyze_resumes(self, request, pk=None):
-    #     job = self.get_object()
-    #     jd = job.description
-    #     applications = JobApplication.objects.filter(job=job)
-        
-    #     if not applications.exists():
-    #         return Response({"detail": "No applications found for this job."}, status=404)
-
-    #     results = []
-
-    #     for app in applications:
-    #         resume_url = app.resume_url  # Assuming resumes are stored in S3 and URL is saved here
-            
-    #         if not resume_url:
-    #             results.append({
-    #                 "application_id": app.application_id,
-    #                 "name": app.name,
-    #                 "status": app.status,
-    #                 "match": "Resume missing",
-    #                 "note": "No resume URL found."
-    #             })
-    #             continue
-
-    #         try:
-    #             # Download the PDF from S3
-    #             response = requests.get(resume_url)
-    #             response.raise_for_status()
-
-    #             # Save to temp file
-    #             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-    #                 tmp_file.write(response.content)
-    #                 resume_path = tmp_file.name
-
-    #             # Extract & analyze
-    #             text = extract_text_from_pdf(resume_path)
-    #             is_resume, note, has_negatives = looks_like_resume(text)
-
-    #             if not is_resume:
-    #                 results.append({
-    #                     "application_id": app.application_id,
-    #                     "name": app.name,
-    #                     "status": app.status,
-    #                     "match": "Not a valid resume",
-    #                     "note": note
-    #                 })
-    #                 continue
-
-    #             percent = sbert_similarity_percent(jd, text)
-    #             if has_negatives:
-    #                 percent = max(0, percent - 10)
-
-    #             label = "Strong match" if percent >= 70 else "Moderate match" if percent >= 50 else "Weak match"
-
-    #             results.append({
-    #                 "application_id": app.application_id,
-    #                 "name": app.name,
-    #                 "status": app.status,
-    #                 "match": label,
-    #                 "score": percent
-    #             })
-
-    #         except Exception as e:
-    #             results.append({
-    #                 "application_id": app.application_id,
-    #                 "name": app.name,
-    #                 "status": app.status,
-    #                 "match": "Error",
-    #                 "note": str(e)
-    #             })
-
-    #         finally:
-    #             if os.path.exists(resume_path):
-    #                 os.remove(resume_path)
-
-    #     return Response(results)
-
-
-    @action(detail=False, methods=['get'], url_path='users')
-    def user_list(self, request):
-        user = request.user
-        if not self._is_hr(user):
-            return Response({"detail": "Only HRs can view users."}, status=403)
-
-        users = User.objects.filter(role='user')
-        serializer = HrUserSerializer(users, many=True)
-        return Response(serializer.data)
- 
-
+   
 
 
 
@@ -1514,34 +912,6 @@ class IsOwnerOrStaff(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         return request.user.is_staff or obj.user_id == request.user.id
     
-class ResumeViewSet(viewsets.ModelViewSet):
-    queryset = Resume.objects.all()
-    serializer_class = ResumeSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = Resume.objects.all()
-
-        # Normal users only see their own resumes
-        if not self.request.user.is_staff:
-            return queryset.filter(user=self.request.user)
-
-        # Staff can filter by user ID query param, or see all
-        user_id = self.request.query_params.get('user')
-        if user_id:
-            queryset = queryset.filter(user__id=user_id)
-
-        return queryset
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    @action(detail=True, methods=["get"], permission_classes=[permissions.IsAuthenticated, IsOwnerOrStaff])
-    def download_url(self, request, pk=None):
-        resume = get_object_or_404(Resume, pk=pk)
-        url = build_presigned_get_url(resume.file.name, expires=300, inline=True)
-        return Response({"url": url})
-    
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -1550,10 +920,6 @@ from django.conf import settings
 import requests
 import uuid
 from datetime import datetime
-
-from datetime import datetime, timedelta
-from django.utils.timezone import now
-import pytz
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1569,19 +935,11 @@ def create_subscription(request):
     customer_email = str(user.email).strip() if getattr(user, "email", None) else "chaitanyakreddysomu@gmail.com"
     customer_phone = str(user.phone).strip() if getattr(user, "phone", None) else "9876543210"
 
+    # Optional: Get these from frontend or settings
     customer_bank_account_number = request.data.get("customer_bank_account_number", "59108290701802")
     customer_bank_ifsc = request.data.get("customer_bank_ifsc", "HDFC0002614")
 
     subscription_id = f"sub_{uuid.uuid4().hex[:8]}"
-
-    # Dynamic time calculation
-    india_tz = pytz.timezone("Asia/Kolkata")
-    now_in_ist = now().astimezone(india_tz)
-
-    # subscription_first_charge_time = now_in_ist.isoformat()
-    subscription_first_charge_time = (now_in_ist + timedelta(days=1)).isoformat()
-
-    subscription_expiry_time = (now_in_ist + timedelta(days=3650)).isoformat()  # 10 years later
 
     payload = {
         "subscription_id": subscription_id,
@@ -1594,16 +952,16 @@ def create_subscription(request):
             "plan_id": plan_id,
         },
         "authorization_details": {
-            "authorization_amount": 1,
+            "authorization_amount": 100,
             "authorization_amount_refund": True,
             "payment_methods": ["enach", "pnach", "upi", "card"]
         },
         "subscription_meta": {
-            "return_url": "https://incirclejobs.com/success",
+            "return_url": "https://wa.me/9512440440?text=Payment%20Successfull",
             "notification_channel": ["EMAIL", "SMS"]
         },
-        "subscription_expiry_time": subscription_expiry_time,
-        "subscription_first_charge_time": subscription_first_charge_time,
+        "subscription_expiry_time": "2100-01-01T23:00:08+05:30",
+        "subscription_first_charge_time": "2025-09-04T23:00:08+05:30",
         "subscription_note": "testSUB",
         "subscription_tags": {
             "psp_note": "Monthly subscription payment",
@@ -1632,160 +990,18 @@ def create_subscription(request):
             "details": data
         }, status=response.status_code)
 
+    # Extract subscription_session_id for frontend use
     subscription_session_id = data.get("subscription_session_id")
-
+    
     return Response({
         "message": "Subscription created successfully",
         "subscription_id": data.get("subscription_id"),
         "subscription_status": data.get("subscription_status"),
-        "subscription_session_id": subscription_session_id,
+        "subscription_session_id": subscription_session_id,  # Use this with Cashfree JS SDK
         "cf_subscription_id": data.get("cf_subscription_id"),
         "raw": data
     })
-    
-    
-    
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from django.conf import settings
-from django.utils.timezone import now
-import uuid
-import pytz
-import requests
 
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def create_one_time_payment(request):
-    user = request.user
-
-    # Step 1: Validate amount
-    order_amount = request.data.get("amount")
-    if not order_amount:
-        return Response({"error": "Amount is required"}, status=400)
-
-    try:
-        order_amount = float(order_amount)
-        if order_amount <= 0:
-            return Response({"error": "Amount must be greater than 0"}, status=400)
-    except ValueError:
-        return Response({"error": "Invalid amount format"}, status=400)
-
-    # Step 2: Validate plan
-    selected_plan = request.data.get("plan", "legend")
-    valid_plans = ["free", "Basic", "Premium"]
-
-    if selected_plan not in valid_plans:
-        return Response({"error": "Invalid plan selected."}, status=400)
-
-    # Step 3: Build order payload
-    order_id = f"order_{uuid.uuid4().hex[:10]}"
-    order_currency = "INR"
-    return_url = "https://incirclejobs.com/success"
-
-    customer_name = str(user.full_name).strip() if getattr(user, "full_name", None) else "Guest User"
-    customer_email = str(user.email).strip() if getattr(user, "email", None) else "noemail@example.com"
-    customer_phone = str(user.phone).strip() if getattr(user, "phone", None) else "9999999999"
-
-    payload = {
-        "order_id": order_id,
-        "order_amount": order_amount,
-        "order_currency": order_currency,
-        "customer_details": {
-            "customer_id": str(user.id),  # used in webhook to identify user
-            "customer_name": customer_name,
-            "customer_email": customer_email,
-            "customer_phone": customer_phone,
-        },
-        "order_meta": {
-            "return_url": return_url,
-        },
-        "order_tags": {  # Pass plan info for webhook to know which plan to activate
-            "plan": selected_plan
-        }
-    }
-
-    headers = {
-        "x-client-id": settings.CASHFREE_APP_ID,
-        "x-client-secret": settings.CASHFREE_SECRET_KEY,
-        "x-api-version": "2022-09-01",
-        "Content-Type": "application/json"
-    }
-
-    try:
-        response = requests.post(
-            "https://sandbox.cashfree.com/pg/orders",
-            json=payload,
-            headers=headers
-        )
-
-        try:
-            data = response.json()
-        except Exception:
-            return Response({"error": "Failed to parse Cashfree response"}, status=500)
-
-        if response.status_code not in [200, 201]:
-            return Response({
-                "error": "Failed to create payment order",
-                "details": data
-            }, status=response.status_code)
-
-        # DO NOT update user plan here — wait for webhook confirmation!
-
-        return Response({
-            "message": "Order created successfully",
-            "order_id": data.get("order_id"),
-            "payment_session_id": data.get("payment_session_id"),
-            "payment_link": data.get("payment_link") or data.get("payments", {}).get("url"),
-            "plan": selected_plan,
-            "raw": data
-        })
-
-    except Exception as e:
-        return Response({
-            "error": "Something went wrong while creating the order",
-            "details": str(e)
-        }, status=500)
-        
-          
-import json
-@csrf_exempt
-@api_view(["POST"])
-def cashfree_webhook(request):
-    try:
-        payload = json.loads(request.body)
-
-        event_type = payload.get("event_type")
-        order_info = payload.get("data", {}).get("order", {})
-        order_id = order_info.get("order_id")
-        order_status = order_info.get("order_status")
-
-        # You can also get customer_id if passed earlier
-        customer_id = order_info.get("customer_details", {}).get("customer_id")
-
-        # Only update on payment success
-        if event_type == "PAYMENT_SUCCESS_WEBHOOK" and order_status == "PAID":
-            if customer_id:
-                try:
-                    user = User.objects.get(id=customer_id)
-                    # Get plan from order_meta or fallback
-                    plan = order_info.get("order_tags", {}).get("plan", "legend")
-
-                    user.plan = plan
-                    user.subscribe_date = now()
-                    user.save()
-
-                    return Response({"message": "User plan updated"}, status=200)
-
-                except User.DoesNotExist:
-                    return Response({"error": "User not found"}, status=404)
-
-        return Response({"message": "Ignored or invalid event"}, status=200)
-
-    except Exception as e:
-        return Response({"error": "Failed to process webhook", "details": str(e)}, status=500)
-        
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -1861,31 +1077,6 @@ def raise_subscription_charge(request):
         "raw": data
     })
   
-@api_view(["POST"])
-@permission_classes([])  # No auth needed for webhook
-def subscription_webhook(request):
-    data = request.data
-    subscription_id = data.get("subscriptionId")
-    status = data.get("subscriptionStatus")  # e.g., ACTIVE, PAUSED
-
-    try:
-        subscription = Subscription.objects.get(subscription_id=subscription_id)
-        subscription.status = status
-        subscription.raw_response = data
-        subscription.save(update_fields=["status", "raw_response", "updated_at"])
-
-        # Update user's plan if subscription becomes active
-        if status == "ACTIVE":
-            user = subscription.user
-            user.plan = subscription.plan_id
-            user.subscribe_date = now()
-            user.save(update_fields=["plan", "subscribe_date"])
-
-    except Subscription.DoesNotExist:
-        print("Subscription not found:", subscription_id)
-
-    return Response({"status": "received"}, status=200)
-
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
