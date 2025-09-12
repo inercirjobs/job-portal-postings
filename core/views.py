@@ -714,6 +714,15 @@ class JobPagination(PageNumberPagination):
 @api_view(['GET'])
 @permission_classes([AllowAnyPermission])
 def available_jobs_pagination_view(request):
+    job_id = request.GET.get('id', None)
+    
+    # If job_id is provided, return that specific job
+    if job_id:
+        job = get_object_or_404(Job, id=job_id, status='active')
+        serializer = JobSerializer(job)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # Continue with the paginated listing
     search = request.GET.get('search', '')
     location = request.GET.get('location', '')
     job_type = request.GET.get('job_type', '')
@@ -722,7 +731,7 @@ def available_jobs_pagination_view(request):
     education = request.GET.get('education', '')
     min_salary = request.GET.get('min_salary', None)
     max_salary = request.GET.get('max_salary', None)
-    company_type = request.GET.get('company_type', '')  # <-- New
+    company_type = request.GET.get('company_type', '')
 
     queryset = Job.objects.filter(status='active').order_by('-created_at')
 
@@ -750,15 +759,13 @@ def available_jobs_pagination_view(request):
         queryset = queryset.filter(max_salary__lte=max_salary)
     if company_type:
         company_types = [ct.strip() for ct in company_type.split(',')]
-        queryset = queryset.filter(created_by__company_type__in=company_types)  # <-- Filtering here
+        queryset = queryset.filter(created_by__company_type__in=company_types)
 
     paginator = JobPagination()
     page = paginator.paginate_queryset(queryset, request)
     serializer = JobSerializer(page, many=True)
 
     return paginator.get_paginated_response(serializer.data)
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def my_applications_view(request):
