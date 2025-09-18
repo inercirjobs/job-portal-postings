@@ -766,6 +766,71 @@ def available_jobs_pagination_view(request):
     serializer = JobSerializer(page, many=True)
 
     return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAnyPermission])  # Change to IsAuthenticatedOrReadOnly if needed
+def available_jobs_pagination_view_by_skills(request):
+    job_id = request.GET.get('id', None)
+
+    # If specific job ID is requested
+    if job_id:
+        job = get_object_or_404(Job, id=job_id, status='active')
+        serializer = JobSerializer(job)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    queryset = Job.objects.filter(status='active').order_by('-created_at')
+
+    # Optional filters
+    search = request.GET.get('search', '')
+    location = request.GET.get('location', '')
+    job_type = request.GET.get('job_type', '')
+    department = request.GET.get('department', '')
+    experience_level = request.GET.get('experience_level', '')
+    education = request.GET.get('education', '')
+    min_salary = request.GET.get('min_salary', None)
+    max_salary = request.GET.get('max_salary', None)
+    company_type = request.GET.get('company_type', '')
+
+    # Filter based on user's skills
+    if request.user.is_authenticated and request.user.skills:
+        user_skills = [skill.strip().lower() for skill in request.user.skills.split(',')]
+        skill_query = Q()
+        for skill in user_skills:
+            skill_query |= Q(skills__icontains=skill)
+        queryset = queryset.filter(skill_query)
+
+    # Other filters
+    if search:
+        queryset = queryset.filter(Q(title__icontains=search) | Q(skills__icontains=search))
+    if location:
+        queryset = queryset.filter(location__icontains=location)
+    if job_type and job_type != 'all':
+        queryset = queryset.filter(job_type=job_type)
+    if department:
+        departments = [d.strip() for d in department.split(',')]
+        queryset = queryset.filter(department__in=departments)
+    if experience_level:
+        levels = [lvl.strip() for lvl in experience_level.split(',')]
+        queryset = queryset.filter(experience_level__in=levels)
+    if education:
+        educations = [ed.strip() for ed in education.split(',')]
+        queryset = queryset.filter(education__in=educations)
+    if min_salary:
+        queryset = queryset.filter(min_salary__gte=min_salary)
+    if max_salary:
+        queryset = queryset.filter(max_salary__lte=max_salary)
+    if company_type:
+        company_types = [ct.strip() for ct in company_type.split(',')]
+        queryset = queryset.filter(created_by__company_type__in=company_types)
+
+    # Paginate and serialize
+    paginator = JobPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    serializer = JobSerializer(page, many=True)
+
+    return paginator.get_paginated_response(serializer.data)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def my_applications_view(request):

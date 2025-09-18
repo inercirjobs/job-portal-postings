@@ -31,6 +31,7 @@ urlpatterns = [
     path('jobs/available/stream/', views.available_jobs_stream_view, name='available-jobs-stream'),
     
     path('jobs/available/pagination/', views.available_jobs_pagination_view, name='available-jobs-pagination'),
+    path('jobs/available/pagination/skills/', views.available_jobs_pagination_view_by_skills, name='available-jobs-pagination'),
     
     
     
